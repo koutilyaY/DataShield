@@ -1,0 +1,61 @@
+name: Tests
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:15-alpine
+        env:
+          POSTGRES_USER: datashield
+          POSTGRES_PASSWORD: datashield_password
+          POSTGRES_DB: datashield
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt pytest pytest-cov
+
+      - name: Run unit tests
+        env:
+          DATABASE_URL: postgresql://datashield:datashield_password@localhost:5432/datashield
+        run: pytest tests/unit/ -v --tb=short --cov=src --cov-report=xml
+
+      - name: Run integration tests
+        env:
+          DATABASE_URL: postgresql://datashield:datashield_password@localhost:5432/datashield
+        run: pytest tests/integration/ -v --tb=short
+
+      - name: Run chaos tests
+        run: pytest tests/chaos/ -v --tb=short
+
+      - name: Type check with mypy
+        run: |
+          pip install mypy
+          mypy src/ --ignore-missing-imports --no-strict-optional
+
+      - name: Upload coverage
+        uses: codecov/codecov-action@v4
+        with:
+          file: ./coverage.xml
+          fail_ci_if_error: false
