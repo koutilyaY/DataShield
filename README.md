@@ -14,7 +14,7 @@
 
 ### Run Demo in Browser (No Installation!)
 
-[![Binder](https://mybinder.org/badge_logo.svg)](https://mybinder.org/v2/gh/koutilyaY/DataShield/main?filepath=demo_working_v2.ipynb)
+[![Binder](https://mybinder.org/badge_logo.svg)](https://mybinder.org/v2/gh/koutilyaY/DataShield/main?filepath=demo.ipynb)
 
 **Click the badge above** to run the full interactive demo in your browser! See:
 - ✅ Schema discovery working on real data
