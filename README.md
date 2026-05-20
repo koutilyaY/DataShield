@@ -32,7 +32,7 @@ git clone https://github.com/koutilyaY/DataShield.git
 cd DataShield
 
 # Run the notebook
-jupyter notebook demo_working_v2.ipynb
+jupyter notebook demo.ipynb
 ```
 
 ### What the Demo Shows
