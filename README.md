@@ -1,602 +1,268 @@
-# DataShield: Real-Time Data Observability Platform
+# DataShield
+
+**Real-time data-observability platform: a data-quality engine, lineage / blast-radius tracking, and ML anomaly detection, exposed over a FastAPI service.**
 
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Tests: 38/38 Passing](https://img.shields.io/badge/tests-38%2F38%20passing-brightgreen)](./tests)
+[![FastAPI](https://img.shields.io/badge/FastAPI-0.104-009688.svg)](https://fastapi.tiangolo.com/)
+[![Tests](https://img.shields.io/badge/tests-22%20pass%20no--infra%20%2F%2038%20collected-blue.svg)](#testing--honest-metrics)
+[![License](https://img.shields.io/badge/license-MIT-yellow.svg)](#license)
 
-> **Production-grade data quality engine + real-time lineage tracking + ML anomaly detection**
-> 
-> Detects data failures 8 hours before humans. Prevents $2-5M in annual data quality losses. Reduces MTTR from 240 minutes to 15 minutes.
+DataShield watches tabular data flowing through a pipeline and answers three questions in one pass:
+
+1. **Is this batch broken?** Statistical and ML detectors flag row-count spikes, null explosions, cardinality collapse, distribution shift, schema drift, and PII leakage.
+2. **What else breaks if it is?** A lineage graph computes the downstream blast radius (which tables, dashboards, and models are affected) and the probability that the failure propagates to each.
+3. **Who needs to know, and can we auto-fix it?** Severity-ranked escalation plus a remediation engine for the cases that have a safe automated response.
+
+It runs three ways with increasing infrastructure: a **zero-dependency demo**, a **full FastAPI service** (Postgres-backed, with a graceful in-memory fallback), and a **streaming mode** (Kafka + Postgres via Docker Compose).
 
 ---
 
-## 🎯 Try the Interactive Demo Now!
+## TL;DR — Quickstart
 
-### Run Demo in Browser (No Installation!)
-
-[![Binder](https://mybinder.org/badge_logo.svg)](https://mybinder.org/v2/gh/koutilyaY/DataShield/main?filepath=demo.ipynb)
-
-**Click the badge above** to run the full interactive demo in your browser! See:
-- ✅ Schema discovery working on real data
-- ✅ Anomaly detection with 3 live scenarios
-- ✅ Comparison vs competitors
-- ✅ All detection methods firing correctly
-
-**Takes 30 seconds, no setup required!**
-
-### Run Demo Locally (2 minutes)
+> Commands assume the repo's local virtualenv at `./venv`. Substitute your own interpreter if you manage environments differently.
 
 ```bash
-# Clone repo
-git clone https://github.com/koutilyaY/DataShield.git
-cd DataShield
-
-# Run the notebook
-jupyter notebook demo.ipynb
-```
-
-### What the Demo Shows
-
-**Scenario 1: Row Count Spike** (+25%)
-```
-Baseline: 1000 rows
-After spike: 1250 rows
-Result: ✅ DETECTED in <1 second
-Severity: CRITICAL
-```
-
-**Scenario 2: Null Explosion** (+20%)
-```
-Column 'amount' nulls: 0% → 20%
-Result: ✅ DETECTED in real-time
-Alert: 200 missing values in critical field
-```
-
-**Scenario 3: Schema Drift**
-```
-New column added: 'new_column'
-Result: ✅ DETECTED immediately
-Impact: Downstream 5 tables affected
-```
-
-### Performance vs Competitors
-
-| Feature | DataShield | Great Expectations | Databand |
-|---------|-----------|-------------------|----------|
-| Detection Time | ⚡ 8 min | ⚠️ 1 hour | ⚠️ 30 min |
-| Detection Accuracy | ✅ 89% | ❌ 65% | ⚠️ 75% |
-| Demo Available | ✅ Live (30s) | ❌ No | ❌ No |
-| Setup Required | ❌ None (Binder) | ⚠️ Manual | ⚠️ Complex |
-
----
-
-## Table of Contents
-- [🎯 Try the Interactive Demo Now!](#-try-the-interactive-demo-now)
-- [Why DataShield?](#why-datashield)
-- [Real-World Impact](#real-world-impact)
-- [Features](#features)
-- [Quick Start](#quick-start)
-- [Performance Metrics](#performance-metrics)
-- [Architecture](#architecture)
-- [Core Components](#core-components)
-- [Technology Stack](#technology-stack)
-- [Roadmap](#roadmap)
-
----
-
-## Why DataShield?
-
-Companies lose **$2-5M annually** in bad data decisions and wasted infrastructure. DataShield prevents that.
-
-**The Problem:**
-- Data breaks at 3am. Stakeholders discover it 8 hours later.
-- No visibility into which dashboards/ML models are broken.
-- Impact analysis is manual and error-prone.
-- PII leaks go undetected.
-
-**The Solution:**
-DataShield detects failures **in <50ms**, calculates blast radius **in <5ms**, and prioritizes escalations by failure probability.
-
----
-
-## Real-World Impact
-
-### Case Study: E-Commerce Payment Processing Pipeline
-
-**The Scenario:**
-A mid-market retailer processes $10M/month in transactions through Stripe. Their payment ETL pipeline fetches transaction data hourly. One day, Stripe updates their API schema, adding a required `fee_type` field for categorizing processing fees.
-
-The ETL job wasn't updated to handle this. Result: Silent failures for 8+ hours.
-
-**Timeline of Events:**
-
-| Time | Event | Without DataShield | With DataShield |
-|------|-------|-------------------|-----------------|
-| **8:00 AM** | Stripe API updates schema | ✅ Change deployed | ✅ Change deployed |
-| **8:05 AM** | ETL job fails (missing `fee_type`) | ❌ Silent failure | 🔴 **SCHEMA_DRIFT** detected in <1 second |
-| **8:06 AM** | — | — | 🟡 **BLAST_RADIUS** calculated: 47 dashboards, 3 ML models affected |
-| **8:07 AM** | — | — | 🔴 **SEVERITY: CRITICAL** (revenue impact) — escalate to on-call |
-| **8:15 AM** | — | — | ✅ Team notified, starts investigation |
-| **8:27 AM** | — | — | ✅ Root cause identified (ETL config missing) |
-| **8:42 AM** | — | — | ✅ Fix deployed (add `fee_type` mapping) |
-| **4:30 PM** (8+ hours later) | ❌ Stakeholders notice analytics missing | ✅ Revenue dashboard working, no data loss | ✅ Full recovery, $0 impact |
-
-**The Impact:**
-- **Without DataShield:** 8+ hours of silent failures → $50K+ in lost transaction visibility → 240-minute MTTR
-- **With DataShield:** <1 second detection → 15-minute MTTR → $50K+ saved
-
-**Why DataShield Caught This:**
-1. **Schema Drift Detector** — Compared expected columns (`transaction_id`, `amount`, `timestamp`, `customer_id`) against actual columns (missing `fee_type`)
-2. **Blast Radius Calculator** — Identified all downstream consumers (Finance dashboard, Fraud ML model, Customer LTV model)
-3. **Probabilistic Escalation** — CRITICAL severity due to downstream revenue impact
-4. **Real-Time Alert** — Slack notification to on-call engineer within 1 second
-
----
-
-## Features
-
-### Quality Engine (Layer 1) ✅
-Detects 8 core failure scenarios:
-
-| Scenario | Example | Detection |
-|----------|---------|-----------|
-| **Late Arrival** | Data didn't update on schedule | <1 second |
-| **Row Count Spike** | ETL job ran twice | <1 second |
-| **Null Rate Explosion** | Column suddenly 80% NULL | <1 second |
-| **Cardinality Collapse** | Unique IDs all the same | <1 second |
-| **Distribution Shift** | Mean jumped 300% | <1 second |
-| **Schema Drift** | Column disappeared/appeared | <1 second |
-| **PII Exposure** | Email leaked into safe column | <1 second |
-| **Cost Anomaly** | Job costs 5x more | <1 second |
-
-### ML Anomaly Detection (Week 5A) ✅
-4 advanced detection methods:
-
-| Method | Detection Time | Best For |
-|--------|---|---|
-| **Isolation Forest** | 45ms | Unknown anomaly patterns, sudden spikes |
-| **Local Outlier Factor** | 45ms | Density-based outliers, clustered data |
-| **Temporal Patterns** | 45ms | Trend breaks, seasonal shifts |
-| **Multivariate** | 45ms | Unusual feature relationships |
-
-### Lineage Graph (Layer 2) ✅
-Real-time dependency tracking:
-
-| Operation | Time | Scalability |
-|-----------|------|-------------|
-| **Blast Radius** | 3.41ms | 100K+ tables |
-| **Probabilistic Propagation** | 0.99ms | Latency-aware |
-| **Graph Metrics** | 1.76ms | Sub-linear memory |
-| **Incremental Updates** | <1ms | Delta-based |
-
-### REST API ✅
-7 endpoints for integration:
-
-```bash
-POST /api/quality/discover       # Auto-discover schema
-POST /api/quality/detect         # Detect anomalies
-POST /api/ml/detect              # ML anomaly detection
-POST /api/ml/compare             # ML vs Statistical
-POST /api/lineage/initialize     # Create graph
-POST /api/lineage/add-table       # Add table
-POST /api/lineage/blast-radius    # Calculate impact
-```
-
----
-
-## Quick Start
-
-### Installation
-
-```bash
-# Clone repo
-git clone https://github.com/koutilyaY/DataShield.git
-cd DataShield
-
-# Create virtual env
+# 0. Setup (once)
 python3 -m venv venv
-source venv/bin/activate
-
-# Install dependencies
-pip install -r requirements.txt
+./venv/bin/pip install -r requirements.txt
 ```
 
-### Run Tests
+### 1. Zero-infra demo (no Postgres, no Kafka)
+
+The fastest way to see every layer working. A self-contained Flask app wires the quality engine, lineage graph, and ML detector against in-memory sample data and serves an interactive UI.
 
 ```bash
-# All tests
-pytest tests/ -v
-
-# Specific suite
-pytest tests/unit/test_quality_engine.py -v
-pytest tests/unit/test_ml_anomaly_detector.py -v
-pytest tests/unit/test_graph_optimizer.py -v
+./venv/bin/python demo_server.py
+# then open http://localhost:5000
 ```
 
-### Start API Server
+Click through the scenarios: scan healthy data, inject a row spike / null explosion / schema drift, simulate a failure to see the blast radius, and run the four ML detectors. Nothing external is required.
+
+### 2. Full API service
 
 ```bash
-python3 src/api/main.py
-# Server running on http://localhost:8000
-# API docs: http://localhost:8000/docs
+./venv/bin/uvicorn src.api.main:app --port 8000
+# interactive docs: http://localhost:8000/docs
 ```
 
-### Run with Docker
+The API prefers a Postgres connection (`DATABASE_URL`) for lineage persistence and **falls back to in-memory state when Postgres is absent**, so it will boot for a demo. OpenTelemetry tracing self-disables if no OTLP collector is reachable. See the [dependency matrix](#dependency-matrix) for what works in each mode.
+
+### 3. Streaming mode (Kafka + Postgres)
 
 ```bash
-docker-compose up --build
-# API on http://localhost:8000
-# PostgreSQL on localhost:5432
+docker compose up                       # core: postgres + api
+docker compose --profile streaming up   # + Kafka, Zookeeper, Schema Registry, Kafka UI
+docker compose --profile full up        # everything incl. Jaeger, Prometheus, Grafana
+```
+
+`docker compose config` validates cleanly.
+
+### 4. Tests
+
+```bash
+./venv/bin/python -m pytest tests/unit tests/integration -q
+# 22 passed in ~1.5s — no infra required
 ```
 
 ---
 
-## Performance Metrics
+## The problem
 
-### Real-World Benchmarks
+Data pipelines fail silently. A schema changes upstream, an ETL job double-runs, a column starts arriving 80% null — and nothing throws an error. The bad data lands in a warehouse, flows into dashboards and ML features, and the first signal is a confused stakeholder hours later. By then the question isn't just "what broke" but "what did it touch."
 
-#### Quality Engine (Anomaly Detection)
+Most quality tooling answers only the first half. You learn a table is bad but not which of your 200 downstream assets just inherited the problem, or which incident deserves the on-call page versus a ticket.
 
-| Operation | Time | Throughput | Notes |
-|-----------|------|-----------|-------|
-| Schema Discovery (10K rows) | 12ms | 833K rows/sec | Auto-detects types, nulls, stats |
-| Statistical Detection (10K rows) | 8ms | 1.25M rows/sec | All 8 detectors in parallel |
-| ML Detection (10K rows) | 45ms | 222K rows/sec | Isolation Forest + LOF + Temporal |
-| ML vs Statistical Comparison | 50ms | — | Both methods run, results compared |
-
-#### Lineage Graph (Impact Analysis)
-
-| Operation | Time | Accuracy | Scalability |
-|-----------|------|----------|-------------|
-| Blast Radius (10K tables) | 3.41ms | 100% | <5ms on 10K-table graph |
-| Graph Metrics (10K tables) | 1.76ms | — | Memory: 5.7MB for 10K tables |
-| Probabilistic Propagation | 0.99ms | Realistic | Accounts for latency + intervention |
-| Incremental Update | <1ms | — | Only invalidates affected cache |
-
-#### Full Stack (End-to-End)
-
-| Workload | Time | Throughput |
-|----------|------|-----------|
-| Discover + Detect (1 table, 100K rows) | 25ms | 4M rows/sec |
-| Initialize Lineage (10K tables) | 800ms | — |
-| Calculate Blast Radius + Propagation (100 queries) | 450ms | 222 queries/sec |
-| REST API request (quality/detect) | 52ms (p95: 87ms) | 19 req/sec |
-
-### Scaling to 100K Tables
-Extrapolated Performance (based on O(V+E) complexity):
-
-| Graph Size | Blast Radius | Memory | Notes |
-|-----------|---|---|---|
-| 10K tables | 3-5ms | 5.7MB | Validated ✅ |
-| 50K tables | ~20ms | 28MB | Extrapolated |
-| 100K tables | ~40ms | 57MB | Sub-50ms target |
-
-Expected on production hardware:
-- 100K+ tables: <50ms blast radius
-- Sub-linear memory: ~57MB (vs NetworkX 300MB+)
-- 7-10x faster than generic graph libraries
-
-### Load Test Results
-Test: 10K table graph with 40K dependencies
-Environment: MacBook Pro M1
-
-✅ Blast Radius Performance:
-- Mean: 3.41ms
-- Min: 0.08ms
-- Max: 46.28ms
-- P95: ~25ms
-
-✅ Probabilistic Propagation:
-- Mean: 0.99ms
-- Min: 0.08ms
-- Max: 17.65ms
-
-✅ Graph Metrics:
-- Computation: 1.76ms
-- Memory: 5.7MB
-
-✅ REST API (quality/detect on 10K rows):
-- Mean: 52ms
-- P95: 87ms
-- P99: 156ms
-
-### Comparison to Industry
-
-| Feature | DataShield | Great Expectations | Databand | Evidently |
-|---------|-----------|-------------------|----------|-----------|
-| Detection Time | <50ms | Manual | Minutes | Minutes |
-| Blast Radius | <5ms | N/A | Minutes (manual) | N/A |
-| Scalability | 100K+ | Limited | 100K+ | Limited |
-| Memory (10K) | 5.7MB | ~50MB | ~80MB | ~40MB |
-| API Response | 52ms (p95) | N/A | 5-10 sec | N/A |
-| ML Detection | ✅ 4 methods | ❌ No | ⚠️ Limited | ✅ Statistical |
-| Cost | Free (OSS) | Free (OSS) | $50K+/yr | Freemium |
+DataShield couples **detection** with **lineage-aware impact analysis** so a single bad batch produces a ranked, scoped answer: what failed, what it cascades into, how likely, and how urgent.
 
 ---
 
 ## Architecture
 
 ```
-Data Sources (Kafka, S3, Databases)
-↓
-┌─────────────────────────────────────┐
-│  Quality Engine (Layer 1) ✅         │
-│  • Schema Discovery                 │
-│  • Statistical Detection (8 methods)│
-│  • ML Detection (4 methods)         │
-│  • Data Contracts                   │
-└─────────────────────────────────────┘
-↓ Quality Alerts
-┌─────────────────────────────────────┐
-│  Lineage Graph (Layer 2) ✅          │
-│  • Dependency Tracking              │
-│  • Blast Radius (BFS)               │
-│  • Probabilistic Propagation        │
-│  • Escalation Routing               │
-└─────────────────────────────────────┘
-↓ Impact Assessment
-┌─────────────────────────────────────┐
-│  REST API (Layer 3) ✅              │
-│  FastAPI + PostgreSQL + Docker      │
-└─────────────────────────────────────┘
-↓
-Alerting (Slack, PagerDuty, Email)
-↓
-┌─────────────────────────────────────┐
-│  Future Layers (Future Work)        │
-│  • Cost Attribution (Layer 4)       │
-│  • Observability (Layer 5)          │
-│  • ML Feature Monitoring (Layer 6)  │
-└─────────────────────────────────────┘
+                      ┌─────────────────────────────────────────────┐
+   Events / batches   │              QUALITY ENGINE                 │
+   (Kafka topic or    │   Schema discovery → baseline metadata      │
+    direct DataFrame) │   Statistical detectors (8 checks)          │
+        ─────────────►│   ML detectors (Isolation Forest, LOF,      │
+                      │     temporal, multivariate)                 │
+                      │   Contract validation                       │
+                      └───────────────────┬─────────────────────────┘
+                                          │ alerts (typed, severity-ranked)
+                                          ▼
+                      ┌─────────────────────────────────────────────┐
+                      │              LINEAGE GRAPH                  │
+                      │   Dependency tracking (tables → tables)     │
+                      │   Blast radius (BFS over the graph)         │
+                      │   Probabilistic propagation (latency-aware) │
+                      │   Escalation routing by criticality         │
+                      └───────────────────┬─────────────────────────┘
+                                          │ impact report
+                                          ▼
+                      ┌─────────────────────────────────────────────┐
+                      │           FastAPI SERVICE / ALERTS          │
+                      │   REST endpoints + /docs (OpenAPI)          │
+                      │   Remediation engine (auto-fix where safe)  │
+                      │   OpenTelemetry traces → Jaeger (optional)  │
+                      └─────────────────────────────────────────────┘
+```
+
+```mermaid
+flowchart LR
+    K[Kafka topic / DataFrame] --> Q
+    subgraph Q[Quality Engine]
+        SD[Schema discovery] --> ST[Statistical detectors]
+        SD --> ML[ML detectors]
+        SD --> CT[Contract validation]
+    end
+    Q -- alerts --> L
+    subgraph L[Lineage Graph]
+        BR[Blast radius BFS] --> PP[Probabilistic propagation]
+    end
+    L -- impact report --> A[FastAPI / alerts / remediation]
 ```
 
 ---
 
-## Performance Optimizations
+## Dependency matrix
 
-DataShield achieves sub-millisecond performance through:
+Not every feature needs every service. This table is the contract for what runs in each mode.
 
-### 1. Efficient Schema Discovery
-- Single-pass column statistics (no multiple scans)
-- Vectorized operations (NumPy, not loops)
-- Lazy evaluation for large DataFrames
-- **Result: 12ms for 10K rows** (833K rows/sec)
+| Capability | Standalone (demo / library) | Needs Postgres | Needs Kafka | Notes |
+|---|:---:|:---:|:---:|---|
+| Schema discovery | ✅ | — | — | Pure pandas/NumPy |
+| Statistical anomaly detection (8 checks) | ✅ | — | — | scipy + pandas |
+| ML anomaly detection (4 methods) | ✅ | — | — | scikit-learn |
+| Contract registration & validation | ✅ | — | — | In-memory registry |
+| Lineage graph + blast radius | ✅ | optional | — | In-memory by default; Postgres persists it |
+| Probabilistic propagation | ✅ | optional | — | Runs on the in-memory graph |
+| Remediation engine | ✅ | — | — | Operates on detected alerts |
+| `demo_server.py` (full UI walkthrough) | ✅ | — | — | Flask, port 5000, sample data baked in |
+| FastAPI service + `/docs` | ✅ (fallback) | recommended | — | Boots without Postgres via in-memory fallback |
+| Persisted lineage across restarts | — | ✅ | — | `DATABASE_URL` → Postgres |
+| Streaming ingestion (real-time consume) | — | ✅ | ✅ | `--profile streaming`; Schema Registry for Avro |
+| Distributed tracing (Jaeger) | — | — | — | Optional OTLP collector; auto-disabled if absent |
 
-### 2. Incremental Graph Updates
-- Only invalidate affected cache entries
-- Delta-based dependency tracking
-- Avoid full graph recalculation
-- **Result: <1ms per dependency update**
-
-### 3. Probabilistic Failure Propagation
-- Early termination when probability < threshold
-- Exponential decay with latency (realistic modeling)
-- BFS with lazy evaluation
-- **Result: <1ms for 10K-table graphs**
-
-### 4. ML Anomaly Detection
-- Sklearn's efficient implementations (Cython)
-- Parallel method execution
-- Contamination-based filtering
-- **Result: 45ms for 4 methods on 10K rows**
-
-### 5. Memory Efficiency
-- In-memory graph representation (~5.7MB for 10K tables)
-- Bit-vectors instead of Python sets
-- Lazy graph materialization
-- **Result: 57MB estimated for 100K tables** (vs 300MB+ for NetworkX)
+**Rule of thumb:** the entire detection + lineage core is pure Python and runs standalone. Postgres buys you persistence; Kafka buys you real-time streaming. Everything degrades gracefully when those are missing.
 
 ---
 
-## Core Components
+## API surface
 
-### 1. Schema Discovery
+The FastAPI app (`src/api/main.py`, v0.3.0) exposes the full platform. Highlights:
 
-Auto-discovers table metadata:
+| Method & path | Purpose |
+|---|---|
+| `GET /health` | Component readiness (quality engine, lineage, ML, contracts, tracing) |
+| `POST /api/quality/discover` | Learn a baseline schema for a table |
+| `POST /api/quality/detect` | Statistical anomaly detection against the baseline |
+| `POST /api/ml/detect` | ML detection (Isolation Forest + LOF + temporal + multivariate) |
+| `POST /api/ml/compare` | Run both detection families and compare results |
+| `POST /api/lineage/initialize` · `/add-table` · `/add-dependency` | Build the lineage graph |
+| `POST /api/lineage/blast-radius` | Compute downstream impact + escalation channels |
+| `POST /api/remediation/remediate` | Detect then auto-remediate where safe |
+| `POST /api/contracts/register` · `/validate` | Data-contract registry + validation |
+| `POST /api/gnn/train` · `/predict` · `/compare` | Experimental GNN cascade prediction vs. heuristic |
 
-```python
-from quality_engine import SchemaDiscovery
+Full, browsable schema lives at `http://localhost:8000/docs` once the service is running.
 
-discovery = SchemaDiscovery()
-metadata = discovery.discover(df, table_name='orders')
+---
 
-# Returns: types, nulls, cardinality, min/max/mean/std, sample values
-```
-
-### 2. Quality Engine (Statistical)
-
-Runs 8 anomaly detectors:
-
-```python
-from quality_engine import AnomalyDetector
-
-detector = AnomalyDetector(baseline_metadata)
-alerts = detector.detect(new_data)
-
-# Returns: list of anomalies with severity levels
-```
-
-### 3. ML Anomaly Detector
-
-Runs 4 ML methods in parallel:
+## Using it as a library
 
 ```python
-from ml_features import MLAnomalyDetector
+import pandas as pd
+from quality_engine.schema import SchemaDiscovery
+from quality_engine.anomaly_detector import AnomalyDetector
+from lineage.database import LineageDB
+from lineage.blast_radius import BlastRadiusCalculator
 
-detector = MLAnomalyDetector(contamination=0.1)
-alerts = detector.detect(df)
+# 1. Learn a baseline, then detect drift on a new batch
+baseline = SchemaDiscovery().discover(df_yesterday, "transactions")
+alerts = AnomalyDetector(baseline).detect(df_today)
 
-# Returns: Isolation Forest + LOF + Temporal + Multivariate detections
-```
-
-### 4. Lineage Graph
-
-Real-time dependency tracking:
-
-```python
-from lineage import LineageDB, BlastRadiusCalculator
-
+# 2. Score downstream impact of a failing table
 db = LineageDB()
-table_id = db.add_table(name, type, owner, criticality, refresh)
-db.add_dependency(upstream_id, downstream_id, latency_minutes)
+raw = db.add_table("raw_events", "source", "data_eng", "de@co.com", "critical", "real-time")
+clean = db.add_table("cleaned_events", "transformation", "data_eng", "de@co.com", "high", "hourly")
+db.add_dependency(raw, clean, latency_minutes=5)
 
-calculator = BlastRadiusCalculator(db)
-report = calculator.calculate(source_table_id)
-
-# Returns: affected tables, probabilities, escalation routes
+report = BlastRadiusCalculator(db).calculate(raw)
+print(report.total_affected, report.critical_affected)
 ```
 
-### 5. REST API
-
-FastAPI with 7 endpoints:
-
-```python
-# See http://localhost:8000/docs for interactive API
-POST /api/quality/discover      # Auto-discover schema
-POST /api/quality/detect        # Statistical detection
-POST /api/ml/detect             # ML detection
-POST /api/ml/compare            # ML vs Statistical
-POST /api/lineage/initialize    # Create graph
-POST /api/lineage/blast-radius  # Calculate impact
-GET  /health                    # Health check
-```
+(`pyproject.toml` sets `pythonpath = ["src"]`, so these imports resolve when running under the project venv / pytest.)
 
 ---
 
-## Technology Stack
+## Testing & honest metrics
 
-### Core
-- **Python 3.11** - Fast, data-science friendly; chosen for NumPy/SciPy ecosystem
-- **Pandas/NumPy** - High-performance vectorized data processing (vs traditional loops)
-- **SciPy** - Statistical computations and distributions
-- **scikit-learn** - ML algorithms (Isolation Forest, LOF); leverages Cython for 10x speedup
+This section is deliberately literal about what is and isn't verified.
 
-### Web & API
-- **FastAPI** - Modern async REST API framework; 3x faster than Flask
-- **Uvicorn** - ASGI web server; supports concurrent request handling
-- **Pydantic** - Type-safe request/response validation
+| Claim | Status |
+|---|---|
+| **Test suite** | 38 tests collected across `tests/`; **22 pass with no infrastructure** (`tests/unit` + `tests/integration`, ~1.5s). The remaining suites (`tests/load`, `tests/chaos`) require running services and are not part of the no-infra count. |
+| **ML anomaly detection accuracy** | A ~94% figure was measured **on synthetic statistical baselines** (injected spikes / null explosions / distribution shifts against generated data), not on a labeled production dataset. Treat it as a sanity benchmark of the detectors on known-shape anomalies, not a generalization guarantee. |
+| **Latency numbers** | Blast-radius and detection timings are fast in local runs on small-to-mid graphs, but the headline sub-millisecond / 100K-table figures are extrapolations, not load-tested guarantees. Run `tests/load/load_test_100k_tables.py` to measure on your hardware. |
+| **`docker compose config`** | Validates cleanly. |
 
-### Storage & Databases
-- **PostgreSQL** - Persistent metadata storage; reliable, proven at scale
-- **SQLAlchemy** - ORM for database operations
-- **Alembic** - Database schema migrations
+Removed from prior versions of this README: unsourced ROI claims ("$2–5M annual losses prevented", "detects failures 8 hours before humans", "38/38 passing"). They were not backed by code or measurement and have been cut or qualified above.
 
-### DevOps & Deployment
-- **Docker** - Containerization for reproducible deployments
-- **docker-compose** - Local development environment (no K8s overhead needed)
-
-### Testing & Quality
-- **pytest** - Unit & integration testing; parametrized tests for coverage
-- **pytest-cov** - Code coverage analysis
-
-### ML & Anomaly Detection
-- **Isolation Forest** - Outlier detection via isolation (handles high-dimensional data)
-- **Local Outlier Factor** - Density-based anomalies (catches contextual outliers)
-- **Temporal Pattern Learning** - Trend break detection (seasonal analysis)
-- **Mahalanobis Distance** - Multivariate anomalies (accounts for feature correlations)
-
----
-
-## Roadmap
-
-### Completed ✅
-- [x] **Weeks 1-3:** Schema discovery, 8 statistical detectors, data contracts, 10+ unit tests
-- [x] **Week 4:** REST API (7 endpoints), FastAPI, PostgreSQL, Docker
-- [x] **Week 5A:** ML Anomaly Detection (4 methods), ML vs Statistical API
-- [x] **Week 5B:** Graph Optimizer (100K+ tables), incremental updates, probabilistic propagation
-- [x] **Week 6:** Technical blog posts (3 deep dives: ML detection, probabilistic propagation, optimization analysis)
-- [x] **Week 7-8:** Load testing (10K table validation), performance documentation, comprehensive README
-- [x] **Working Jupyter Demo** - Interactive demo with 3 scenarios, schema discovery, anomaly detection
-
-### Future Work (Not Started)
-- [ ] **Layer 4:** Cost Attribution — Track compute costs per table/query
-- [ ] **Layer 5:** Observability — Metrics, tracing, logging integration
-- [ ] **Layer 6:** ML Feature Monitoring — Model drift detection, feature health
-
----
-
-## Design Decisions
-
-### Why Python + Pandas?
-- Data engineers know it; fastest iteration cycle
-- NumPy/SciPy ecosystem beats hand-rolled solutions
-- Deploying as Docker container = language agnostic at scale
-
-### Why BFS over NetworkX?
-- 7-10x faster (no library overhead)
-- Custom optimizations (depth limiting, early termination)
-- Linear complexity: O(V+E)
-- Validated: <5ms on 10K-table graphs
-
-### Why Probabilistic over Deterministic?
-- Realistic failure modeling (latency + human intervention time)
-- Better incident prioritization (CRITICAL vs WARNING)
-- Validated against real incident timelines (reduces false escalations)
-
-### Why 4 ML Methods?
-- Each catches different patterns:
-  - **Isolation Forest** → unknown patterns
-  - **LOF** → density-based outliers
-  - **Temporal** → trend breaks
-  - **Multivariate** → relationship breaks
-- Ensemble approach = 89% precision (vs 65% single-method)
-
----
-
-## Contributing
+Run the verified suite:
 
 ```bash
-# Fork repo, create branch
-git checkout -b feature/add-cost-tracking
-
-# Write tests first
-pytest tests/unit/test_cost.py
-
-# Run full suite
-pytest tests/ -v --cov
-
-# Commit + push
-git push origin feature/add-cost-tracking
+./venv/bin/python -m pytest tests/unit tests/integration -q
 ```
 
 ---
 
-## Interview Impact
+## Tech stack
 
-This project demonstrates:
+| Layer | Tools | Role |
+|---|---|---|
+| API | FastAPI, Uvicorn, Pydantic | Async REST service, request/response validation, OpenAPI docs |
+| Data & ML | pandas, NumPy, SciPy, scikit-learn | Schema discovery, statistical checks, Isolation Forest / LOF / temporal / multivariate detectors |
+| Persistence | PostgreSQL, SQLAlchemy, Alembic | Lineage metadata storage and migrations (optional; in-memory fallback) |
+| Streaming | Kafka via `confluent-kafka`, Confluent Schema Registry | Real-time event ingestion and Avro schema management |
+| Observability | OpenTelemetry (SDK + OTLP exporter), Jaeger, Prometheus, Grafana | Distributed tracing and metrics (all optional, auto-disable if absent) |
+| Packaging & ops | Docker, Docker Compose, Helm / Kubernetes | Local profiles (core / streaming / observability / full) and a K8s chart under `helm/datashield` |
 
-1. **ML Expertise** — 4 detection methods, ensemble comparison, 89% precision
-2. **Systems Thinking** — BFS optimization, probabilistic modeling, 100K+ table scalability
-3. **Production Mindset** — REST API, Docker, PostgreSQL, 38+ comprehensive tests
-4. **Full Stack** — Data quality, lineage, ML, API, DevOps
-5. **Performance Engineering** — Sub-millisecond operations, validated on realistic loads
-6. **Communication Skills** — Interactive demo, clear documentation, technical blog posts
+---
 
-**Resume Bullets:**
-- "Built interactive Jupyter demo showcasing real-time anomaly detection with 3 live scenarios (row spike, null explosion, schema drift) and schema discovery; deployed on Binder for instant cloud access"
-- "Architected ML anomaly detection (Isolation Forest, LOF, temporal patterns, multivariate) achieving 89% precision, 24% better than statistical-only baselines; validated on 1M+ test rows"
-- "Optimized lineage graph for 100K+ tables using custom BFS + incremental updates + probabilistic propagation; <5ms blast radius, 57MB memory (7-10x vs NetworkX)"
-- "Built production-grade REST API with FastAPI, PostgreSQL, Docker; 38/38 tests passing, <50ms detection time, validated on 10K-table load test with real dependency graphs"
+## Repository layout
+
+```
+DataShield/
+├── demo_server.py              # Zero-infra Flask demo (port 5000)
+├── docker-compose.yml          # Profiles: core / streaming / observability / full
+├── Dockerfile
+├── requirements.txt
+├── pyproject.toml              # pythonpath=["src"], pytest config
+├── src/
+│   ├── api/main.py             # FastAPI app (all endpoints, v0.3.0)
+│   ├── quality_engine/         # schema discovery + statistical detectors
+│   ├── ml_features/            # ML anomaly detector (4 methods)
+│   ├── lineage/                # graph DB, blast radius, graph optimizer
+│   ├── contracts/              # contract registry + validator
+│   ├── remediation/            # auto-remediation engine + actions
+│   ├── streaming/              # Kafka producer/consumer, schema registry client
+│   ├── observability/          # OpenTelemetry tracing setup
+│   └── gnn/                    # experimental GNN cascade predictor
+├── tests/
+│   ├── unit/                   # quality engine, ML detector, graph optimizer
+│   ├── integration/            # lineage graph end-to-end
+│   ├── load/                   # 100K-table load test (needs running services)
+│   └── chaos/                  # resilience tests (needs running services)
+├── helm/datashield/            # Kubernetes Helm chart
+├── benchmarks/ · docs/         # benchmark notes and deep-dive write-ups
+└── demo.ipynb                  # Jupyter walkthrough
+```
 
 ---
 
 ## License
 
-MIT License - See LICENSE file for details
+MIT. See the badge above; add a `LICENSE` file if distributing.
 
 ---
 
-## Author
-
-**Koutilya Yenumula**
-- M.S. Computer Science, University of South Florida (May 2026)
-- Data Engineering: 3+ years (Visa, Cognizant)
-- AWS Certified Data Engineer – Associate
-- GitHub: [@koutilyaY](https://github.com/koutilyaY)
-- LinkedIn: [in/koutilya716-yenumula](https://linkedin.com/in/koutilya716-yenumula-b675911b1)
-
----
-
-## Questions or Feedback?
-
-Open an issue on GitHub or reach out directly. This is a learning project showcasing real data engineering skills.
+*Built by Koutilya Yenumula ([@koutilyaY](https://github.com/koutilyaY)). This is a portfolio project demonstrating data-engineering systems design — read the [metrics section](#testing--honest-metrics) for the verified-vs-aspirational breakdown.*
