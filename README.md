@@ -6,6 +6,9 @@
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.104-009688.svg)](https://fastapi.tiangolo.com/)
 [![Tests](https://img.shields.io/badge/tests-22%20pass%20no--infra%20%2F%2038%20collected-blue.svg)](#testing--honest-metrics)
 [![License](https://img.shields.io/badge/license-MIT-yellow.svg)](#license)
+[![Live Demo](https://img.shields.io/badge/%F0%9F%8E%A5_Live_Demo-Streamlit-FF4B4B.svg?logo=streamlit&logoColor=white)](https://YOUR-APP.streamlit.app)
+
+> **🎥 Live demo:** an interactive, zero-infra Streamlit dashboard (`streamlit_app.py`) is included — inject data incidents and watch the detectors fire. Deploy free on [Streamlit Community Cloud](https://share.streamlit.io) from a `demo` branch whose `requirements.txt` = `requirements-streamlit.txt` (entrypoint `streamlit_app.py`), then replace this line + the badge above with your `*.streamlit.app` URL. <!-- TODO: paste your deployed URL here -->
 
 DataShield watches tabular data flowing through a pipeline and answers three questions in one pass:
 

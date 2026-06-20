@@ -1,0 +1,9 @@
+# Requirements for the DataShield Streamlit demo (streamlit_app.py).
+# Use this file on Streamlit Community Cloud as the app's requirements file,
+# or rename to requirements.txt in a deploy branch. Pinned to the versions
+# verified locally in ./venv (Python 3.11).
+streamlit==1.41.1
+pandas==2.1.3
+numpy==1.26.2
+scipy==1.11.4
+scikit-learn==1.3.2
