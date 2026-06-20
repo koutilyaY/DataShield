@@ -1,8 +1,8 @@
-# Root requirements = the Streamlit demo (streamlit_app.py), so the public
-# demo deploys cleanly on Streamlit Community Cloud from `main`.
-# For the full FastAPI service (Postgres/Kafka/OTel), use requirements-full.txt.
-streamlit==1.41.1
-pandas==2.1.3
-numpy==1.26.2
-scipy==1.11.4
-scikit-learn==1.3.2
+# Root requirements = the Streamlit demo (streamlit_app.py), pinned to versions
+# that ship Python 3.14 wheels (Streamlit Community Cloud builds on 3.14).
+# Full FastAPI service deps (Postgres/Kafka/OTel) live in requirements-full.txt.
+streamlit==1.58.0
+pandas==2.3.3
+numpy==2.4.6
+scipy==1.17.1
+scikit-learn==1.9.0
