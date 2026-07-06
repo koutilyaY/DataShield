@@ -78,17 +78,15 @@ Auto-routes escalations
 - Enterprise support
 
 **What it's missing:**
-- Expensive ($50K+/year)
+- Commercial licensing (enterprise pricing)
 - Closed source (can't customize)
 - Cloud-only deployment
 - Blast radius is manual/partial
 - Long setup (weeks)
 
 **DataShield advantages:**
-Cost comparison:
-
-Databand: $50K/year + implementation = $70K total Year 1
-DataShield: $0 + your time = free
+DataShield is MIT-licensed and self-hosted (no license fee); Databand is a
+commercial product. Beyond cost:
 
 Feature comparison:
 
@@ -387,9 +385,8 @@ dbt (transformation) + DataShield (monitoring)
 └─ dbt builds pipelines
 └─ DataShield monitors quality + routes incidents
 
-**Cost:** ~$15K Year 1 (vs $87K with Databand)
-**Setup:** 40 hours (vs 100+ hours with competing solutions)
-**Flexibility:** 10/10 (both open source, customizable)
+Both are open source and self-hosted, so licensing cost is zero; you pay only
+your own setup/ops time.
 
 ### For Teams with Existing dbt
 dbt (transformation) + Great Expectations (strict validation) + DataShield (fast escalation)
@@ -397,9 +394,7 @@ dbt (transformation) + Great Expectations (strict validation) + DataShield (fast
 └─ Great Expectations validates contracts
 └─ DataShield detects anomalies automatically
 
-**Cost:** ~$40K Year 1
-**Setup:** 100 hours
-**Flexibility:** 9/10
+All three are open source; cost is your setup/ops time.
 
 ### For Enterprise with Budget
 dbt + Databand + DataShield
@@ -407,9 +402,8 @@ dbt + Databand + DataShield
 └─ Databand monitors jobs (cost/execution)
 └─ DataShield monitors data quality (automatic detection/response)
 
-**Cost:** $100K+ Year 1
-**Setup:** 150+ hours
-**Flexibility:** 7/10 (Databand is proprietary)
+Databand is proprietary (commercial licensing); dbt and DataShield are open
+source. Price Databand against your own contract.
 
 ---
 
