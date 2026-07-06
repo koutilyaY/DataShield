@@ -106,12 +106,13 @@ class AnomalyDetector:
         # Scenario 5: Distribution shift
         self._check_distribution_shift(df)
         
-        # Scenario 6: Schema drift
+        # Scenario 6: Schema drift (missing/new columns + column type changes)
         self._check_schema_drift(df)
-        
+        self._check_type_drift(df)
+
         # Scenario 7: PII exposure
         self._check_pii_exposure(df)
-        
+
         return self.alerts
     
     def _check_row_count(self, df: pd.DataFrame):
@@ -273,6 +274,53 @@ class AnomalyDetector:
             )
             self.alerts.append(alert)
     
+    def _check_type_drift(self, df: pd.DataFrame):
+        """
+        Scenario 6b: Detect a column whose *type* changed vs. the baseline.
+
+        A column can stay present (so plain schema drift misses it) yet arrive
+        with a different type — e.g. an upstream break sends Quantity as the
+        text "12 units" instead of an int. That silently breaks every numeric
+        check downstream, so we flag it explicitly.
+        """
+        from .schema import SchemaDiscovery
+
+        for col in df.columns:
+            if col not in self.baseline.columns:
+                continue
+            baseline_type = self.baseline.columns[col].column_type
+            if baseline_type == ColumnType.UNKNOWN:
+                continue
+            observed_type = SchemaDiscovery._infer_type(df[col])
+            if observed_type == ColumnType.UNKNOWN:
+                continue
+
+            # Numeric-family types are interchangeable (int vs float is fine).
+            numeric = {ColumnType.INTEGER, ColumnType.FLOAT}
+            same_family = baseline_type in numeric and observed_type in numeric
+            if observed_type != baseline_type and not same_family:
+                # A numeric column arriving as string is the dangerous case.
+                severity = (
+                    SeverityLevel.CRITICAL
+                    if baseline_type in numeric
+                    else SeverityLevel.WARNING
+                )
+                alert = AnomalyAlert(
+                    anomaly_type=AnomalyType.SCHEMA_DRIFT,
+                    table_name=self.baseline.table_name,
+                    column_name=col,
+                    severity=severity,
+                    message=(
+                        f"Column '{col}' type changed from "
+                        f"{baseline_type.value} to {observed_type.value}"
+                    ),
+                    detected_at=datetime.utcnow().isoformat(),
+                    baseline_value=baseline_type.value,
+                    observed_value=observed_type.value,
+                    details={"type_drift": True},
+                )
+                self.alerts.append(alert)
+
     def _check_pii_exposure(self, df: pd.DataFrame):
         """Scenario 7: Detect PII in columns that shouldn't have it."""
         # Heuristic PII patterns
