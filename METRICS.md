@@ -1,364 +1,120 @@
-# DataShield: Business Impact & Performance Metrics
+# DataShield: Honest Metrics
 
-## Executive Summary
+This file reports only measured numbers. Every figure below comes from running
+the code in this repo on the real UCI Online Retail dataset. There are no dollar
+figures, no "X hours faster than a human", no ROI estimates — those were removed
+because nothing in this repo measures them.
 
-DataShield prevents **$2-5M in annual data quality losses** by:
-- Detecting failures **8 hours faster** than manual investigation
-- Reducing Mean Time To Resolution (MTTR) from **240 minutes → 15 minutes**
-- Preventing **cascading failures** affecting 50+ downstream tables
-- Automating **incident response routing** to the right teams
+Reproduce everything with:
 
----
-
-## Business Impact Metrics
-
-### 1. Financial Impact
-
-#### Data Quality Incidents Cost Analysis
-Based on industry research (Gartner, IDC) for mid-market data organizations:
-
-| Metric | Value | Source |
-|--------|-------|--------|
-| Average incident cost (manual resolution) | $100K - $500K | Gartner Data Management Report 2024 |
-| Annual incidents (without DataShield) | 20-50 | Industry median |
-| Total annual loss | $2M - $25M | Calculated |
-| **DataShield prevention rate** | **40-60%** | Typical observability ROI |
-| **Annual savings** | **$800K - $5M** | Conservative estimate |
-
-#### Example Incident Breakdown (Revenue Loss)
-
-**Scenario: Customer analytics pipeline breaks for 8 hours**
-8-hour outage impact:
-├─ Customer segments stale (ML recommendations fail)
-├─ Dashboard metrics outdated (business decisions delayed)
-├─ API latency increases (downstream services affected)
-└─ Manual investigation takes 4 hours
-Financial impact:
-
-Lost recommendations: 50K users × $0.10 = $5K
-Delayed decision-making: $50K (business opportunity cost)
-Engineering time (4 engineers × 4 hours × $150/hr) = $2.4K
-Reputation damage: $20K
-TOTAL: ~$80K for ONE incident
-
-Annual impact (50 incidents): $4M
-With DataShield (80% prevention): $3.2M saved
+```bash
+python scripts/download_data.py     # cache the real dataset (~541,909 rows)
+python run_demo.py                  # real profile + injected-fault evaluation
+python -m pytest tests/unit tests/integration -q
+```
 
 ---
 
-### 2. Operational Efficiency
+## What is real vs. synthetic
 
-#### Time to Resolution (MTTR) Reduction
+| Thing | Real or synthetic | Why |
+|---|---|---|
+| Base dataset (UCI Online Retail, 541,909 rows) | **Real** | Actual UK online-retailer transactions, 2010-12 to 2011-12. Genuinely messy. |
+| Quality issues reported below (nulls, cancellations, negatives, duplicates) | **Real** | Counted directly from the real file. |
+| Injected faults used for the precision/recall evaluation | **Synthetic, with ground-truth labels** | You cannot measure a detector without knowing which batches are broken. Base rows are real; the fault is added and labelled. |
+| Precision/recall numbers | **Real measurements** | Real detector output scored against the injected-fault labels. |
 
-| Phase | Without DataShield | With DataShield | Improvement |
-|-------|-------------------|-----------------|-------------|
-| **Detection** | 8 hours (manual monitoring) | <1 second (automated) | **28,800x faster** |
-| **Diagnosis** | 2 hours (investigation) | 2 minutes (auto-calculated blast radius) | **60x faster** |
-| **Escalation** | 1 hour (manual notification) | 30 seconds (automated routing) | **120x faster** |
-| **Remediation** | 1-2 hours (on-call response) | 15 minutes (prepared teams) | **6x faster** |
-| **TOTAL MTTR** | **240 minutes** | **15 minutes** | **16x faster** |
-
-#### Real-World Timeline Comparison
-
-**Without DataShield (240 minutes):**
-3:00 AM: orders table stops updating
-↓ (no one notices)
-8:00 AM: VP checks dashboard, sees failure
-↓ (30 min to page on-call)
-8:30 AM: Engineer starts investigation
-↓ (30 min to find root cause)
-9:00 AM: Need to understand impact
-↓ (60 min to manually trace dependencies)
-10:00 AM: Identify 15 affected teams
-↓ (30 min for email notifications)
-10:30 AM: Teams respond, fix deployed
-
-**With DataShield (15 minutes):**
-3:00 AM: orders table stops updating
-↓ (immediate detection)
-3:01 AM: Anomaly alert generated
-↓ (automatic calculation)
-3:02 AM: Blast radius calculated
-
-6 affected tables
-3 critical (dashboard, ML, revenue)
-15 min until CEO dashboard breaks
-↓ (automatic routing)
-3:03 AM: PagerDuty alert to data-eng
-Impact summary included
-Escalation plan ready
-3:15 AM: On-call engineer pages upstream team
-↓ (root cause identified)
-3:15 AM: Fix deployed, incident resolved
-
+The base rows are real e-commerce transactions. The faults are injected on top of
+clean slices of that real data specifically so the detection metrics can be
+measured against known ground truth. That is the standard, honest way to evaluate
+a data-quality system.
 
 ---
 
-### 3. Engineering Productivity
+## Real quality issues found in Online Retail
 
-#### Manual vs. Automated Incident Response
+Counted directly from the 541,909-row real dataset (`src/eval/real_data.py`):
 
-| Task | Manual | DataShield | Time Saved |
-|------|--------|-----------|-----------|
-| Detect anomaly | 480 min | 1 sec | 480 min |
-| Find root cause | 120 min | 2 min | 118 min |
-| Determine impact | 60 min | 1 ms | 60 min |
-| Notify teams | 30 min | 30 sec | 29.5 min |
-| Coordinate response | 60 min | 15 min | 45 min |
-| **TOTAL** | **750 min** | **17.5 min** | **732.5 min (12+ hours)** |
+| Issue | Value |
+|---|---|
+| Rows x columns | 541,909 x 8 |
+| CustomerID null rate | **24.93%** (135,080 rows) |
+| Description null rate | 0.27% (1,454 rows) |
+| Cancelled invoices (InvoiceNo starts with 'C') | 9,288 (1.71%) |
+| Negative-quantity rows (returns/cancellations) | 10,624 (1.96%) |
+| Non-positive UnitPrice rows | 2,517 |
+| Exact duplicate rows | 5,268 |
+| Quantity range | [-80,995, 80,995] |
+| UnitPrice range | [-11,062.06, 38,970.00] |
+| Outlier line-amount rows (\|z\|>3 on Quantity x UnitPrice) | 403 |
 
-#### Engineer Capacity Freed
-Incidents per month: 50
-Time saved per incident: 12 hours
-Total saved per month: 600 hours
-Translation:
-
-600 hours = 3.5 engineer-months
-Cost: 3.5 eng × $200K/year ÷ 12 = $58K/month saved
-Annual savings: $696K in engineer time alone
-
+Running the quality engine on the raw feed (baseline learned from the first 30
+days, detection on the full year) fires a `row_count_spike` alert, which is
+correct — the full year is ~13x the size of the first month.
 
 ---
 
-### 4. Risk Mitigation
+## Detection precision/recall on injected faults
 
-#### Cascading Failure Prevention
+`run_demo.py` builds 30 evaluation batches (~5,000 rows each): 5 repetitions of
+each of 5 fault types plus 5 clean control batches. It learns a baseline from a
+clean slice of the real data, then scores the detector against the ground-truth
+labels (`src/eval/evaluate.py`).
 
-**Without DataShield:**
-- Upstream failure cascades to 50+ downstream tables
-- Takes hours to understand full impact
-- Manual remediation of 15+ systems in parallel
-- High risk of human error during crisis
+| Injected fault | Precision | Recall | F1 |
+|---|---:|---:|---:|
+| null_spike (60% CustomerID nulls) | 1.00 | 1.00 | 1.00 |
+| distribution_drift (8x amount, past 3 sigma) | 1.00 | 1.00 | 1.00 |
+| schema_type_change (Quantity -> text) | 1.00 | 1.00 | 1.00 |
+| pii_injection (emails in Description) | 1.00 | 1.00 | 1.00 |
+| cardinality_collapse (all one CustomerID) | 1.00 | 1.00 | 1.00 |
+| **any-fault vs clean** | **1.00** | **1.00** | — |
 
-**With DataShield:**
-- Blast radius calculated in <1ms
-- All affected systems identified instantly
-- Automated escalation to right teams
-- Clear prioritization (fix critical path first)
+### Be blunt: what these numbers do and do not show
 
-#### SLA Protection
+- They show the detection **pipeline is correct**: every injected fault type is
+  caught, and clean control batches are not false-flagged. That is a real,
+  non-trivial result — before this work the engine could not catch a
+  numeric-to-text type change at all (a dedicated type-drift check was added to
+  `AnomalyDetector` to fix that).
+- They **do not** claim the detector is hard. The injected faults are large and
+  unambiguous (60% nulls, 8x drift). Perfect scores here mean the faults are
+  clearly out of distribution, not that the detector would catch subtle
+  real-world corruption.
+- Known threshold characteristics, measured while building this:
+  - **Null check is trivially sensitive when the baseline is 0% null.** The rule
+    is "alert if null rate more than doubles"; doubling 0 is still ~0, so any
+    nonzero null trips it. Good for catching a clean column going bad, but it
+    would be noisy on a column that is normally slightly null.
+  - **Distribution-shift check is insensitive on heavy-tailed real data.** Online
+    Retail line-amounts have a huge standard deviation (~$103), so the >3-sigma
+    rule needs a very large mean shift to fire. A 3x mean shift was **not**
+    caught in testing; it took ~8x. On long-tailed real distributions this check
+    is conservative.
 
-Example: "Revenue dashboard must refresh hourly"
-Without DataShield:
-
-Failure detected: 8 hours later
-SLA breach: Guaranteed
-Impact: Customer contracts at risk
-
-With DataShield:
-
-Failure detected: <1 second
-Estimated impact: "CEO dashboard breaks in 120 min"
-Action: Fix deployed in 15 min
-SLA: Protected, customer never knows
-
-
----
-
-## Performance Metrics
-
-### Quality Engine Performance
-
-#### Speed Benchmarks
-Benchmark: Schema discovery + anomaly detection
-Data Size          Time      Throughput
-────────────────────────────────────────
-10K rows          12ms      833K rows/sec
-100K rows         45ms      2.2M rows/sec
-1M rows          320ms      3.1M rows/sec
-10M rows        2.8sec      3.6M rows/sec
-
-#### Scalability Analysis
-Detection complexity: O(n) where n = number of rows
-Memory usage: ~1KB per column (statistics stored)
-For a typical data warehouse:
-
-500 tables × 100 columns average = 50K columns
-Memory needed: 50MB (negligible)
-Weekly scan: ~5 hours parallel
-
+These are honest limitations of simple statistical thresholds, not bugs.
 
 ---
 
-### Lineage Graph Performance
+## Test suite
 
-#### Blast Radius Calculation
-Graph Size          Tables    Dependencies   Time    Depth
-─────────────────────────────────────────────────────────
-Small              7         6               0.20ms   3
-Medium             20        30              0.08ms   10
-Large              100       200             0.50ms   20
-Xlarge             1000      5000            3.2ms    50
-XXlarge            10000     50000           28ms     100
+`tests/unit` + `tests/integration` run with no infrastructure:
 
-#### Complexity Analysis
-Algorithm: Breadth-First Search
-Time: O(V + E) where V=tables, E=dependencies
-Space: O(V) for visited set
-Example: 10K tables, 50K dependencies
-Operations: 60,000
-Time: ~30ms
-Memory: ~80KB
+```
+26 passed
+```
 
-#### BFS vs. Alternatives
-Algorithm      Time     Space    Pros               Cons
-──────────────────────────────────────────────────────
-BFS (used)    O(V+E)   O(V)     Depth-ordered,     -
-Fast, Optimal
-DFS           O(V+E)   O(V)     Uses recursion     Deep tables first
-Topological   O(V+E)   O(V)     Finds cycles       Overkill for DAG
-Dijkstra      O(V²)    O(V)     Weighted paths     Much slower
+This includes 4 new tests in `tests/unit/test_eval_injected_faults.py` that
+exercise the real-data eval harness (they skip cleanly if the dataset cache is
+absent). The `tests/load` and `tests/chaos` suites require running services and
+are not part of this count.
 
 ---
 
-## Test Coverage
+## Lineage / blast radius
 
-### Unit Tests (Quality Engine)
-test_schema_discovery ............ PASSED (12ms)
-test_row_count_spike ............. PASSED (8ms)
-test_null_explosion .............. PASSED (5ms)
-test_cardinality_collapse ........ PASSED (7ms)
-test_schema_drift ................ PASSED (6ms)
-─────────────────────────────────────
-5/5 tests passing (38ms total)
-
-### Integration Tests (Lineage Graph)
-test_simple_chain ................ PASSED (1ms)
-test_fan_out ..................... PASSED (1ms)
-test_complex_graph ............... PASSED (2ms)
-test_orphan_table ................ PASSED (<1ms)
-test_computation_speed ........... PASSED (0.02ms)
-─────────────────────────────────────
-5/5 tests passing (5ms total)
-
-### Coverage Summary
-Statements: 450 lines covered / 450 lines total = 100%
-Branches: 85 branches covered / 95 branches = 89%
-Functions: 25 functions / 25 = 100%
-Critical paths: 100% covered
-Edge cases: 89% covered
-
----
-
-## Production Readiness Checklist
-
-- ✅ **Code Quality**
-  - 980+ lines of clean, tested code
-  - Type hints on all functions
-  - Comprehensive docstrings
-  - PEP 8 compliant
-
-- ✅ **Testing**
-  - 10/10 tests passing
-  - 100% coverage on critical paths
-  - Performance benchmarked
-  - Edge cases covered
-
-- ✅ **Performance**
-  - Detection: <5ms per table
-  - Blast radius: <1ms per query
-  - Memory efficient: 1MB per 1K tables
-  - Scales to 10K+ tables
-
-- ✅ **Documentation**
-  - Comprehensive README
-  - Code examples (Quality Engine + Lineage)
-  - Algorithm explanations
-  - Performance analysis
-
-- 🔄 **Future (Weeks 4-5)**
-  - REST API (FastAPI)
-  - PostgreSQL backend
-  - Docker containerization
-  - AWS deployment
-
----
-
-## Comparison to Commercial Solutions
-
-| Feature | DataShield | Great Expectations | Databand | Evidently |
-|---------|-----------|-------------------|----------|-----------|
-| **Detection time** | <1 sec | Manual | Minutes | Minutes |
-| **Blast radius** | <1ms | N/A | N/A | N/A |
-| **Auto-escalation** | ✅ | ❌ | ⚠️ | ❌ |
-| **Setup time** | <1 hour | Days | Days | Hours |
-| **Cost** | $0 (OSS) | $$$$ | $$$$ | $$$$ |
-
-**Value Proposition:**
-- Same observability as $50K/year tools
-- Zero licensing cost
-- Customizable to your data stack
-- Open source (hackable)
-
----
-
-## Key Learnings & Design Decisions
-
-### Why Breadth-First Search (BFS)?
-
-**Trade-offs evaluated:**
-- **DFS:** Explores deep first (bad for incident response - CEO's dashboard might be depth 5)
-- **BFS:** Explores breadth first ✅ (critical tables discovered first)
-- **Dijkstra:** Weighted paths (overkill for unweighted DAG)
-- **Topological sort:** Finds cycles (not needed for DAGs)
-
-**Decision:** BFS is optimal for incident severity ordering.
-
-### Why In-Memory Storage (for now)?
-
-**Trade-offs:**
-- **PostgreSQL:** Durable, queryable, but slower (10-100ms queries)
-- **Redis:** Fast, in-memory, but limited query language
-- **In-memory dict:** Fastest ✅ (sub-millisecond queries)
-
-**Decision:** In-memory for prototype. Week 4-5 will add PostgreSQL + Redis cache.
-
-### Why Statistical Anomaly Detection?
-
-**Trade-offs:**
-- **Rule-based:** Fast, interpretable, but brittle (requires tuning per table)
-- **ML-based:** Adaptive, catches patterns, but slower and needs training
-- **Statistical:** Good balance ✅ (works out-of-box, interpretable, fast)
-
-**Decision:** Statistical for MVP. Week 6-7 will add ML-based methods.
-
----
-
-## What's Next?
-
-### Week 4-5: Production Layer
-- REST API (FastAPI + Pydantic)
-- PostgreSQL backend (Alembic migrations)
-- Redis caching (hot queries)
-- Docker containerization
-
-### Week 6-7: Advanced Detection
-- ML-based anomaly detection (Isolation Forest, LOF)
-- Temporal pattern learning (Monday/Friday/holiday patterns)
-- Multivariate anomaly detection
-- Seasonality adjustment
-
-### Week 8+: Deployment & Scale
-- AWS deployment (ECS, RDS, ElastiCache)
-- 100K+ table scale testing
-- Probabilistic failure propagation
-- Cost attribution system
-
----
-
-## References
-
-1. Gartner Data Management Report 2024
-2. "The Cost of Bad Data" - Harvard Business Review
-3. "Observability Engineering" - O'Reilly
-4. BFS Algorithm - CLRS Introduction to Algorithms
-5. Statistical Anomaly Detection - Outlier Detection for Temporal Data (Chandola et al.)
-
----
-
-## Questions?
-
-Interested in the technical details? See:
-- [README.md](./README.md) - Architecture overview
-- [COMPARISON.md](./COMPARISON.md) - vs Great Expectations, Databand, etc.
-- Code: `src/quality_engine/` and `src/lineage/`
+The blast-radius BFS is real and runs in-process on the in-memory lineage graph
+(`src/lineage`). Its timing on the small demo graph is sub-millisecond, but the
+headline "scales to 100K tables at N ms" figures from earlier drafts were
+extrapolations, not load-tested guarantees, and have been removed. Run
+`tests/load/load_test_100k_tables.py` to measure on your own hardware.

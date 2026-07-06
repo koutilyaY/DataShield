@@ -7,11 +7,12 @@
 | **Schema Discovery** | ✅ Auto | ❌ Manual | ✅ Auto | ❌ Manual | ⚠️ Basic |
 | **Anomaly Detection** | ✅ 8 scenarios | ✅ Rules | ✅ Rules | ❌ No | ✅ Statistical |
 | **Lineage Tracking** | ✅ Real-time BFS | ❌ No | ✅ DAG-based | ✅ DAG | ❌ No |
-| **Blast Radius** | ✅ <1ms | ❌ No | ⚠️ Manual | ⚠️ Manual | ❌ No |
-| **Auto-Escalation** | ✅ PagerDuty/Slack | ❌ No | ⚠️ Basic | ❌ No | ❌ No |
-| **Detection Time** | ✅ <1 sec | ⚠️ Batch | ⚠️ Minutes | ⚠️ Batch | ⚠️ Minutes |
+| **Blast Radius** | ✅ BFS over lineage graph | ❌ No | ⚠️ Manual | ⚠️ Manual | ❌ No |
+| **Auto-Escalation** | ✅ Severity-routed | ❌ No | ⚠️ Basic | ❌ No | ❌ No |
+| **Detection mode** | ✅ Per-batch | ⚠️ Batch | ⚠️ Minutes | ⚠️ Batch | ⚠️ Minutes |
 | **Cost Attribution** | 🔄 Planned | ❌ No | ✅ Yes | ❌ No | ❌ No |
-| **ML Anomaly Detection** | 🔄 Planned | ❌ No | ⚠️ Limited | ❌ No | ✅ Yes |
+| **ML Anomaly Detection** | ✅ IsoForest/LOF/temporal/multivariate | ❌ No | ⚠️ Limited | ❌ No | ✅ Yes |
+| **Evaluated on real public data** | ✅ UCI Online Retail + injected-fault P/R | ⚠️ Varies | ⚠️ Varies | ❌ No | ⚠️ Varies |
 | **Setup Time** | ✅ <1 hour | ⚠️ Days | ⚠️ Days | ✅ Hours | ⚠️ Hours |
 | **Licensing Cost** | ✅ Free (OSS) | ✅ Free (OSS) | ❌ $$$$ | ✅ Free (OSS) | ⚠️ Freemium |
 | **On-Prem Deploy** | ✅ Easy | ✅ Easy | ❌ Cloud-only | ✅ Easy | ✅ Easy |
@@ -217,36 +218,14 @@ AWS Glue (infrastructure) → DataShield (observability)
 
 ---
 
-## Cost Analysis
+## Cost
 
-### Year 1 Total Cost of Ownership
-
-#### DataShield Path
-Infrastructure:     Free (runs on existing hardware)
-Licensing:          $0 (open source)
-Setup time:         30 hours × $150/hr = $4,500
-Ongoing ops:        5 hours/month × $150 = $9,000
-─────────────────────────────────────────────
-TOTAL YEAR 1:       $13,500
-
-#### Great Expectations Path
-Infrastructure:     $2,000 (small instance)
-Licensing:          $0 (open source)
-Setup time:         80 hours × $150/hr = $12,000
-Assertion creation: 40 hours × $150 = $6,000
-Ongoing ops:        10 hours/month × $150 = $18,000
-─────────────────────────────────────────────
-TOTAL YEAR 1:       $38,000
-
-#### Databand Path
-Infrastructure:     Included (SaaS)
-Licensing:          $60,000/year (enterprise)
-Setup & config:     100 hours × $200/hr = $20,000
-Ongoing ops:        3 hours/month × $200 = $7,200
-─────────────────────────────────────────────
-TOTAL YEAR 1:       $87,200
-
-**DataShield savings:** $24,500 vs Great Expectations, $73,700 vs Databand
+DataShield is MIT-licensed and runs on existing hardware, so its licensing cost is
+zero. The commercial tools above have real per-seat or enterprise pricing that
+varies by contract. Earlier drafts of this file contained specific dollar
+"savings" figures (setup hours, year-1 TCO, "$24,500 saved vs X"); those were
+invented, not sourced or measured, and have been removed. If you need a TCO
+comparison, price the tools against your own team's rates and volume.
 
 ---
 
@@ -465,8 +444,6 @@ Add DataShield for: "If invalid, what breaks?"
 ### From Databand
 Migrate custom detectors from Databand to DataShield
 Reuse escalation logic
-Cost savings: $50K+ per year
-Customization gains: 10x
 
 ### From dbt Contracts
 dbt shows: "What depends on me?"
@@ -498,5 +475,5 @@ DataShield shows: "If I fail, what breaks in <1ms and how fast?"
 
 See:
 - [README.md](./README.md) - Technical architecture
-- [METRICS.md](./METRICS.md) - Business impact & ROI
-- Code: `src/quality_engine/` and `src/lineage/`
+- [METRICS.md](./METRICS.md) - Honest, reproduced metrics (real vs synthetic)
+- Code: `src/quality_engine/`, `src/lineage/`, and `src/eval/` (real-data evaluation)

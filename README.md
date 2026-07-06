@@ -1,14 +1,8 @@
 # DataShield
 
-**Real-time data-observability platform: a data-quality engine, lineage / blast-radius tracking, and ML anomaly detection, exposed over a FastAPI service.**
+**Real-time data-observability platform: a data-quality engine, lineage / blast-radius tracking, and ML anomaly detection, exposed over a FastAPI service. Evaluated on a real, messy public dataset — not just synthetic data.**
 
-[![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
-[![FastAPI](https://img.shields.io/badge/FastAPI-0.104-009688.svg)](https://fastapi.tiangolo.com/)
-[![Tests](https://img.shields.io/badge/tests-22%20pass%20no--infra%20%2F%2038%20collected-blue.svg)](#testing--honest-metrics)
-[![License](https://img.shields.io/badge/license-MIT-yellow.svg)](#license)
-[![Live Demo](https://img.shields.io/badge/%F0%9F%8E%A5_Live_Demo-Streamlit-FF4B4B.svg?logo=streamlit&logoColor=white)](https://YOUR-APP.streamlit.app)
-
-> **🎥 Live demo:** an interactive, zero-infra Streamlit dashboard (`streamlit_app.py`) is included — inject data incidents and watch the detectors fire. Deploy free on [Streamlit Community Cloud](https://share.streamlit.io) straight from `main` (entrypoint `streamlit_app.py`) — the root `requirements.txt` is the lightweight demo set, while the full FastAPI service deps live in `requirements-full.txt`. Replace this line + the badge above with your `*.streamlit.app` URL once deployed. <!-- TODO: paste your deployed URL here -->
+Python 3.11+ · FastAPI · MIT licensed.
 
 DataShield watches tabular data flowing through a pipeline and answers three questions in one pass:
 
@@ -20,6 +14,51 @@ It runs three ways with increasing infrastructure: a **zero-dependency demo**, a
 
 ---
 
+## Real data + honest evaluation
+
+Most portfolio DQ projects only ever run on data they generated themselves, which
+proves nothing — of course a detector finds the anomaly you just injected into a
+clean synthetic frame. DataShield is evaluated on a **real, genuinely messy public
+dataset**, and its detection accuracy is measured against **ground truth** instead
+of asserted.
+
+- **Base dataset is REAL:** the [UCI *Online Retail*](https://archive.ics.uci.edu/dataset/352/online+retail)
+  dataset — 541,909 actual e-commerce transactions from a UK online retailer
+  (2010–2011). It ships real mess: **24.93% of rows have no CustomerID**, 1.71% are
+  cancelled invoices, 1.96% have negative quantities (returns), plus zero/negative
+  prices, 5,268 exact duplicates, and extreme outlier amounts. The quality engine
+  runs over all of it and reports what it actually finds.
+- **Detection is evaluated the honest way:** you can't measure precision/recall
+  without labels, and the real feed has none. So DataShield takes **clean slices of
+  the real data and injects KNOWN, labelled faults** (null spike, distribution
+  drift, a numeric→text type change, injected PII emails, cardinality collapse),
+  then scores the detector against those labels. The base rows are real; the
+  injected fault is the synthetic-with-ground-truth part — that's how you evaluate a
+  data-quality system.
+
+Reproduce it (no paid keys, no infra):
+
+```bash
+python scripts/download_data.py    # cache the real dataset under data/ (gitignored)
+python run_demo.py                 # real-data profile + injected-fault precision/recall
+```
+
+Measured detection on the injected faults (real detector output vs. ground truth):
+
+| Injected fault | Precision | Recall |
+|---|---:|---:|
+| null_spike · distribution_drift · schema_type_change · pii_injection · cardinality_collapse | 1.00 | 1.00 |
+| any-fault vs. clean control batches | 1.00 | 1.00 |
+
+Blunt caveat: these faults are large and unambiguous, so perfect scores mean the
+**pipeline is correct**, not that the detector is hard to fool. The simple
+statistical thresholds have real limits (e.g. the >3σ distribution check is
+insensitive on Online Retail's heavy-tailed amounts and needs ~8× drift to fire).
+See [METRICS.md](./METRICS.md) for the full real-vs-synthetic breakdown and the
+threshold characteristics found while building this.
+
+---
+
 ## TL;DR — Quickstart
 
 > Commands assume the repo's local virtualenv at `./venv`. Substitute your own interpreter if you manage environments differently.
@@ -27,19 +66,23 @@ It runs three ways with increasing infrastructure: a **zero-dependency demo**, a
 ```bash
 # 0. Setup (once)
 python3 -m venv venv
-./venv/bin/pip install -r requirements-full.txt   # full service (Postgres/Kafka/OTel); demo-only deps live in requirements.txt
+./venv/bin/pip install -r requirements-full.txt   # full service + data/eval deps; demo-only deps live in requirements.txt
 ```
 
-### 1. Zero-infra demo (no Postgres, no Kafka)
+### 1. Zero-infra demo on REAL data (no Postgres, no Kafka)
 
-The fastest way to see every layer working. A self-contained Flask app wires the quality engine, lineage graph, and ML detector against in-memory sample data and serves an interactive UI.
+The fastest way to see every layer working against the real dataset:
 
 ```bash
-./venv/bin/python demo_server.py
-# then open http://localhost:5000
+./venv/bin/python scripts/download_data.py   # once — caches UCI Online Retail
+./venv/bin/python run_demo.py                # real profile + injected-fault eval
 ```
 
-Click through the scenarios: scan healthy data, inject a row spike / null explosion / schema drift, simulate a failure to see the blast radius, and run the four ML detectors. Nothing external is required.
+`run_demo.py --profile-only` prints just the real quality issues; `--eval-only`
+prints just the precision/recall. An interactive **Streamlit** dashboard
+(`streamlit_app.py`) is also included — pick the *Online Retail (REAL)* dataset
+(after downloading) or the synthetic one, inject incidents with sliders, and watch
+the detectors fire.
 
 ### 2. Full API service
 
@@ -139,7 +182,8 @@ Not every feature needs every service. This table is the contract for what runs 
 | Lineage graph + blast radius | ✅ | optional | — | In-memory by default; Postgres persists it |
 | Probabilistic propagation | ✅ | optional | — | Runs on the in-memory graph |
 | Remediation engine | ✅ | — | — | Operates on detected alerts |
-| `demo_server.py` (full UI walkthrough) | ✅ | — | — | Flask, port 5000, sample data baked in |
+| `run_demo.py` (real-data profile + eval) | ✅ | — | — | Runs on cached UCI Online Retail; injected-fault precision/recall |
+| `streamlit_app.py` (interactive dashboard) | ✅ | — | — | Real or synthetic dataset, slider-driven incidents |
 | FastAPI service + `/docs` | ✅ (fallback) | recommended | — | Boots without Postgres via in-memory fallback |
 | Persisted lineage across restarts | — | ✅ | — | `DATABASE_URL` → Postgres |
 | Streaming ingestion (real-time consume) | — | ✅ | ✅ | `--profile streaming`; Schema Registry for Avro |
@@ -199,16 +243,22 @@ print(report.total_affected, report.critical_affected)
 
 ## Testing & honest metrics
 
-This section is deliberately literal about what is and isn't verified.
+This section is deliberately literal about what is and isn't verified. Full
+numbers and reproduction steps are in [METRICS.md](./METRICS.md).
 
 | Claim | Status |
 |---|---|
-| **Test suite** | 38 tests collected across `tests/`; **22 pass with no infrastructure** (`tests/unit` + `tests/integration`, ~1.5s). The remaining suites (`tests/load`, `tests/chaos`) require running services and are not part of the no-infra count. |
-| **ML anomaly detection accuracy** | A ~94% figure was measured **on synthetic statistical baselines** (injected spikes / null explosions / distribution shifts against generated data), not on a labeled production dataset. Treat it as a sanity benchmark of the detectors on known-shape anomalies, not a generalization guarantee. |
-| **Latency numbers** | Blast-radius and detection timings are fast in local runs on small-to-mid graphs, but the headline sub-millisecond / 100K-table figures are extrapolations, not load-tested guarantees. Run `tests/load/load_test_100k_tables.py` to measure on your hardware. |
+| **Real base dataset** | UCI Online Retail, 541,909 real transactions. Real quality issues counted directly (24.93% null CustomerID, 1.71% cancellations, 1.96% negative quantities, 5,268 duplicates, outlier amounts). Reproduce with `python run_demo.py --profile-only`. |
+| **Detection precision/recall** | **Real**, measured against injected faults with ground-truth labels (`src/eval`). All five injected fault types caught at 1.00/1.00; clean controls not false-flagged. The faults are large/unambiguous — perfect scores mean the pipeline is correct, not that the detector is hard to fool. See the blunt caveats in METRICS.md. |
+| **Test suite** | **26 pass with no infrastructure** (`tests/unit` + `tests/integration`), including 4 new real-data eval tests that skip cleanly without the dataset cache. `tests/load` / `tests/chaos` need running services and aren't in this count. |
+| **Latency numbers** | Blast-radius / detection timings are fast locally on small-to-mid graphs, but the sub-millisecond / 100K-table figures were extrapolations, not load-tested, and have been removed. Run `tests/load/load_test_100k_tables.py` to measure on your hardware. |
 | **`docker compose config`** | Validates cleanly. |
 
-Removed from prior versions of this README: unsourced ROI claims ("$2–5M annual losses prevented", "detects failures 8 hours before humans", "38/38 passing"). They were not backed by code or measurement and have been cut or qualified above.
+Removed from prior versions: unsourced ROI/dollar claims ("$2–5M annual losses
+prevented", "detects failures 8 hours before humans", MTTR-in-dollars tables).
+They were not backed by any code or measurement in this repo and have been cut.
+The old synthetic-only "~94% accuracy" figure is superseded by the real
+injected-fault evaluation above.
 
 Run the verified suite:
 
@@ -235,14 +285,21 @@ Run the verified suite:
 
 ```
 DataShield/
-├── demo_server.py              # Zero-infra Flask demo (port 5000)
+├── run_demo.py                 # Zero-infra demo on REAL data (profile + injected-fault eval)
+├── streamlit_app.py            # Interactive dashboard (real or synthetic dataset)
+├── scripts/download_data.py    # Cache the real UCI Online Retail dataset under data/
+├── data/                       # Cached dataset (gitignored; reproduce via the script)
 ├── docker-compose.yml          # Profiles: core / streaming / observability / full
 ├── Dockerfile
-├── requirements.txt
+├── requirements.txt            # Streamlit demo deps ; requirements-full.txt = service + data/eval
 ├── pyproject.toml              # pythonpath=["src"], pytest config
 ├── src/
+│   ├── eval/                   # REAL-data profiling + fault injection + precision/recall eval
+│   │   ├── real_data.py        #   load + profile Online Retail, run the quality engine on it
+│   │   ├── fault_injection.py  #   inject KNOWN labelled faults into clean real slices
+│   │   └── evaluate.py         #   score detector vs ground truth -> precision/recall
 │   ├── api/main.py             # FastAPI app (all endpoints, v0.3.0)
-│   ├── quality_engine/         # schema discovery + statistical detectors
+│   ├── quality_engine/         # schema discovery + statistical detectors (+ type-drift check)
 │   ├── ml_features/            # ML anomaly detector (4 methods)
 │   ├── lineage/                # graph DB, blast radius, graph optimizer
 │   ├── contracts/              # contract registry + validator
@@ -251,12 +308,13 @@ DataShield/
 │   ├── observability/          # OpenTelemetry tracing setup
 │   └── gnn/                    # experimental GNN cascade predictor
 ├── tests/
-│   ├── unit/                   # quality engine, ML detector, graph optimizer
+│   ├── unit/                   # quality engine, ML detector, graph optimizer, real-data eval
 │   ├── integration/            # lineage graph end-to-end
 │   ├── load/                   # 100K-table load test (needs running services)
 │   └── chaos/                  # resilience tests (needs running services)
 ├── helm/datashield/            # Kubernetes Helm chart
 ├── benchmarks/ · docs/         # benchmark notes and deep-dive write-ups
+├── METRICS.md                  # honest, reproduced metrics (real vs synthetic)
 └── demo.ipynb                  # Jupyter walkthrough
 ```
 
