@@ -11,3 +11,6 @@ htmlcov/
 dist/
 build/
 .mypy_cache/
+
+# Cached datasets (real UCI Online Retail); reproduce with scripts/download_data.py
+data/
