@@ -72,7 +72,13 @@ COLUMNS = ["transaction_id", "amount", "customer_id", "status"]
 
 @st.cache_data(show_spinner=False)
 def make_baseline(n: int = 10_000, seed: int = 42) -> pd.DataFrame:
-    """A clean, known-good 'transactions' dataset — the baseline DataShield learns."""
+    """A clean, known-good 'transactions' dataset — the baseline DataShield learns.
+
+    NOTE: this is SYNTHETIC data used only as an easy, always-available baseline
+    for the interactive slider demo. The REAL evaluation on the UCI Online Retail
+    dataset lives in `run_demo.py` / `src/eval` (real base rows + injected faults
+    with ground truth). See the README.
+    """
     rng = np.random.default_rng(seed)
     return pd.DataFrame(
         {
@@ -82,6 +88,36 @@ def make_baseline(n: int = 10_000, seed: int = 42) -> pd.DataFrame:
             "status": rng.choice(["completed", "pending", "failed"], n),
         }
     )
+
+
+@st.cache_data(show_spinner=False)
+def load_real_online_retail():
+    """Load the REAL UCI Online Retail clean slice if the cache is present.
+
+    Returns (baseline_df, available_flag). The columns are renamed to the demo's
+    transaction schema so the same detectors run unchanged.
+    """
+    cache = os.path.join(REPO_ROOT, "data", "online_retail.parquet")
+    if not os.path.exists(cache):
+        return None, False
+    raw = pd.read_parquet(cache)
+    invoice = raw["InvoiceNo"].astype(str)
+    mask = (
+        raw["CustomerID"].notna()
+        & (raw["Quantity"] > 0)
+        & (raw["UnitPrice"] > 0)
+        & ~invoice.str.startswith("C")
+    )
+    clean = raw.loc[mask]
+    df = pd.DataFrame(
+        {
+            "transaction_id": np.arange(1, len(clean) + 1),
+            "amount": (clean["Quantity"].values * clean["UnitPrice"].values).round(2),
+            "customer_id": clean["CustomerID"].astype("int64").values,
+            "status": clean["Country"].astype(str).values,
+        }
+    )
+    return df, True
 
 
 def make_observed(
@@ -94,20 +130,33 @@ def make_observed(
     cardinality_collapse: bool,
     inject_pii: bool,
     drop_column: bool,
+    source_df: "pd.DataFrame | None" = None,
 ) -> pd.DataFrame:
-    """Generate a fresh batch and optionally inject quality incidents."""
+    """Generate/sample a fresh batch and optionally inject quality incidents.
+
+    If `source_df` is given (the REAL Online Retail clean slice), the batch is a
+    real sample and `amount_shift` is applied additively to the real amounts.
+    Otherwise the batch is synthetic.
+    """
     base_rows = int(n * (1 + row_spike_pct / 100.0))
     base_rows = max(base_rows, 50)
     rng = np.random.default_rng(seed + 1)
 
-    df = pd.DataFrame(
-        {
-            "transaction_id": np.arange(1, base_rows + 1),
-            "amount": rng.normal(100 + amount_shift, 20, base_rows).round(2),
-            "customer_id": rng.integers(1000, 9999, base_rows),
-            "status": rng.choice(["completed", "pending", "failed"], base_rows),
-        }
-    )
+    if source_df is not None:
+        df = source_df.sample(n=min(base_rows, len(source_df)),
+                              random_state=seed + 1, replace=base_rows > len(source_df)
+                              ).reset_index(drop=True)
+        df["transaction_id"] = np.arange(1, len(df) + 1)
+        df["amount"] = (df["amount"] + amount_shift).round(2)
+    else:
+        df = pd.DataFrame(
+            {
+                "transaction_id": np.arange(1, base_rows + 1),
+                "amount": rng.normal(100 + amount_shift, 20, base_rows).round(2),
+                "customer_id": rng.integers(1000, 9999, base_rows),
+                "status": rng.choice(["completed", "pending", "failed"], base_rows),
+            }
+        )
 
     # Null explosion on `amount`
     if null_rate > 0:
@@ -136,12 +185,20 @@ with st.sidebar:
     st.header("⚙️ Demo controls")
     st.caption("Pick a dataset, then inject incidents to see DataShield react.")
 
+    _real_df, _real_ok = load_real_online_retail()
+    _options = ["transactions (synthetic)"]
+    if _real_ok:
+        _options.insert(0, "Online Retail (REAL, UCI)")
     dataset = st.selectbox(
         "Sample dataset",
-        ["transactions (synthetic)"],
-        help="A clean baseline of e-commerce transactions is learned first; "
-        "your observed batch is checked against it.",
+        _options,
+        help="'Online Retail (REAL)' learns the baseline from a clean slice of the "
+        "real UCI dataset (available after running scripts/download_data.py). "
+        "'transactions (synthetic)' is generated data for the slider demo.",
     )
+    if not _real_ok:
+        st.caption("Run `python scripts/download_data.py` to unlock the REAL "
+                   "Online Retail dataset here.")
     batch_size = st.slider("Observed batch size (rows)", 200, 12_000, 8_000, 200)
     seed = st.number_input("Random seed", 0, 9999, 7, 1)
 
@@ -189,7 +246,13 @@ SEV_BADGE = {"critical": "🔴", "warning": "🟠", "info": "🔵"}
 
 
 @st.cache_resource(show_spinner=False)
-def get_baseline_metadata():
+def get_baseline_metadata(use_real: bool = False):
+    if use_real:
+        real_df, ok = load_real_online_retail()
+        if ok:
+            base = real_df.sample(n=min(10_000, len(real_df)), random_state=42).reset_index(drop=True)
+            meta = SchemaDiscovery().discover(base, "online_retail")
+            return base, meta
     base = make_baseline()
     meta = SchemaDiscovery().discover(base, "transactions")
     return base, meta
@@ -204,7 +267,8 @@ def quality_score(alerts) -> int:
 
 
 if run:
-    base_df, baseline_meta = get_baseline_metadata()
+    use_real = dataset.startswith("Online Retail")
+    base_df, baseline_meta = get_baseline_metadata(use_real=use_real)
 
     observed = make_observed(
         batch_size,
@@ -215,6 +279,7 @@ if run:
         cardinality_collapse=cardinality_collapse,
         inject_pii=inject_pii,
         drop_column=drop_column,
+        source_df=base_df if use_real else None,
     )
 
     # --- REAL statistical quality checks ---
