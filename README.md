@@ -4,6 +4,11 @@
 
 Python 3.11+ · FastAPI · MIT licensed.
 
+<p align="center">
+  <img src="assets/hero.png" width="620"><br>
+  <sub>What the quality engine actually finds in 541,909 real Online Retail transactions — not a synthetic frame it was handed.</sub>
+</p>
+
 DataShield watches tabular data flowing through a pipeline and answers three questions in one pass:
 
 1. **Is this batch broken?** Statistical and ML detectors flag row-count spikes, null explosions, cardinality collapse, distribution shift, schema drift, and PII leakage.
